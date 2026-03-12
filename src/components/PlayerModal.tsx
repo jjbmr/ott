@@ -2,6 +2,7 @@ import { X, Play, Pause, Volume2, VolumeX, Maximize, RotateCcw } from 'lucide-re
 import { useEffect, useRef, useState } from 'react';
 import Hls from 'hls.js';
 import { Match } from '../data';
+import { getYouTubeId } from '../utils';
 
 interface PlayerModalProps {
   match: Match | null;
@@ -15,9 +16,11 @@ export default function PlayerModal({ match, onClose, onPlay }: PlayerModalProps
   const [isMuted, setIsMuted] = useState(false);
   const [progress, setProgress] = useState(0);
   const [hasEnded, setHasEnded] = useState(false);
+  
+  const youtubeId = match?.videoType === 'youtube' ? getYouTubeId(match.videoUrl) : null;
 
   useEffect(() => {
-    if (match && videoRef.current) {
+    if (match && videoRef.current && match.videoType !== 'youtube') {
       const video = videoRef.current;
       const isHLS = match.videoUrl.includes('.m3u8');
 
@@ -105,17 +108,26 @@ export default function PlayerModal({ match, onClose, onPlay }: PlayerModalProps
 
       <div className="relative w-full max-w-6xl aspect-video bg-zinc-900 rounded-2xl overflow-hidden shadow-2xl ring-1 ring-white/10 group">
         {/* Video Player */}
-        <video
-          ref={videoRef}
-          className="w-full h-full object-cover"
-          onTimeUpdate={handleTimeUpdate}
-          onEnded={() => {
-            setIsPlaying(false);
-            setHasEnded(true);
-          }}
-          onClick={togglePlay}
-          autoPlay
-        />
+        {match.videoType === 'youtube' ? (
+          <iframe
+            src={`https://www.youtube.com/embed/${youtubeId}?autoplay=1&mute=${isMuted ? 1 : 0}&rel=0&modestbranding=1`}
+            className="w-full h-full border-none"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowFullScreen
+          />
+        ) : (
+          <video
+            ref={videoRef}
+            className="w-full h-full object-cover"
+            onTimeUpdate={handleTimeUpdate}
+            onEnded={() => {
+              setIsPlaying(false);
+              setHasEnded(true);
+            }}
+            onClick={togglePlay}
+            autoPlay
+          />
+        )}
 
         {/* Replay Overlay */}
         {hasEnded && (
@@ -123,7 +135,7 @@ export default function PlayerModal({ match, onClose, onPlay }: PlayerModalProps
             <h3 className="text-xl font-bold text-white mb-6">Highlight Ended</h3>
             <button 
               onClick={togglePlay}
-              className="mt-6 flex items-center gap-3 px-8 py-3 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-black rounded-xl transition-all uppercase tracking-widest shadow-lg shadow-emerald-500/20"
+              className="mt-6 flex items-center gap-3 px-8 py-3 bg-sky-500 hover:bg-sky-400 text-zinc-950 font-black rounded-xl transition-all uppercase tracking-widest shadow-lg shadow-sky-500/20"
             >
               <RotateCcw className="w-5 h-5" />
               <span>Replay Highlight</span>
@@ -132,12 +144,12 @@ export default function PlayerModal({ match, onClose, onPlay }: PlayerModalProps
         )}
 
         {/* Custom Controls Overlay */}
-        <div className={`absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none flex flex-col justify-end p-6 ${hasEnded ? 'hidden' : ''}`}>
+        <div className={`absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none flex flex-col justify-end p-6 ${hasEnded || match.videoType === 'youtube' ? 'hidden' : ''}`}>
           <div className="pointer-events-auto space-y-4">
             {/* Progress Bar */}
             <div className="w-full h-1 bg-white/20 rounded-full overflow-hidden cursor-pointer group/progress relative">
               <div 
-                className="h-full bg-emerald-500 transition-all duration-100 ease-linear shadow-[0_0_8px_rgba(16,185,129,0.5)]"
+                className="h-full bg-sky-500 transition-all duration-100 ease-linear shadow-[0_0_8px_rgba(14,165,233,0.5)]"
                 style={{ width: `${progress}%` }}
               />
             </div>
@@ -145,10 +157,10 @@ export default function PlayerModal({ match, onClose, onPlay }: PlayerModalProps
             {/* Controls */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
-                <button onClick={togglePlay} className="text-white hover:text-emerald-400 transition-colors">
+                <button onClick={togglePlay} className="text-white hover:text-sky-400 transition-colors">
                   {isPlaying ? <Pause className="w-6 h-6 fill-current" /> : <Play className="w-6 h-6 fill-current" />}
                 </button>
-                <button onClick={toggleMute} className="text-white hover:text-emerald-400 transition-colors">
+                <button onClick={toggleMute} className="text-white hover:text-sky-400 transition-colors">
                   {isMuted ? <VolumeX className="w-6 h-6" /> : <Volume2 className="w-6 h-6" />}
                 </button>
                 <div className="ml-4">
@@ -157,7 +169,7 @@ export default function PlayerModal({ match, onClose, onPlay }: PlayerModalProps
                 </div>
               </div>
               
-              <button onClick={toggleFullScreen} className="text-white hover:text-emerald-400 transition-colors">
+              <button onClick={toggleFullScreen} className="text-white hover:text-sky-400 transition-colors">
                 <Maximize className="w-5 h-5" />
               </button>
             </div>

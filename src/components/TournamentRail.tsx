@@ -1,4 +1,5 @@
 import { Tournament } from '../data';
+import { Play } from 'lucide-react';
 
 interface TournamentRailProps {
   tournaments: Tournament[];
@@ -8,52 +9,65 @@ interface TournamentRailProps {
 
 export default function TournamentRail({ tournaments, activeCategory, onSelectCategory }: TournamentRailProps) {
   return (
-    <div className="py-8 max-w-[1440px] mx-auto px-6 lg:px-12 overflow-x-auto hide-scrollbar">
-      <div className="flex items-center gap-10 min-w-max">
-        {/* 'All' Circle */}
-        <button 
-          onClick={() => onSelectCategory('All')}
-          className="flex flex-col items-center gap-3 group transition-all"
-        >
-          <div className={`w-20 h-20 rounded-full flex items-center justify-center border-2 transition-all duration-300 ${
-            activeCategory === 'All' 
-              ? 'border-emerald-500 bg-emerald-500/10 scale-110 shadow-[0_0_20px_rgba(16,185,129,0.3)]' 
-              : 'border-white/10 bg-zinc-900 group-hover:border-white/30'
-          }`}>
-            <span className={`text-xs font-black uppercase tracking-widest ${activeCategory === 'All' ? 'text-emerald-400' : 'text-zinc-500'}`}>All</span>
-          </div>
-          <span className={`text-[10px] font-black uppercase tracking-widest transition-colors ${activeCategory === 'All' ? 'text-emerald-400' : 'text-zinc-500 group-hover:text-white'}`}>
-            Browse
-          </span>
-        </button>
+    <div className="py-6 sm:py-10 space-y-4 sm:space-y-6">
+      <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-12">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg sm:text-xl font-black text-white tracking-tighter uppercase">Popular Tournaments</h2>
+        </div>
+      </div>
 
-        {/* Tournament Circles */}
-        {tournaments.map((t) => (
+      <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-12 overflow-x-auto hide-scrollbar">
+        <div className="flex items-center gap-4 sm:gap-6 min-w-max pb-4">
+          {/* 'All' Card */}
           <button 
-            key={t.id}
-            onClick={() => onSelectCategory(t.name)}
-            className="flex flex-col items-center gap-3 group transition-all"
+            onClick={() => onSelectCategory('All')}
+            className={`group relative w-44 sm:w-64 aspect-[16/9] rounded-xl sm:rounded-2xl overflow-hidden border-2 transition-all duration-500 hover:scale-105 ${
+              activeCategory === 'All' 
+                ? 'border-sky-500 shadow-2xl shadow-sky-500/20' 
+                : 'border-white/5 bg-zinc-900/50 hover:border-white/20'
+            }`}
           >
-            <div className={`w-20 h-20 rounded-full overflow-hidden border-2 transition-all duration-300 relative ${
-              activeCategory === t.name 
-                ? 'border-emerald-500 scale-110 shadow-[0_0_20px_rgba(16,185,129,0.3)]' 
-                : 'border-white/10 bg-zinc-900 group-hover:border-white/30'
-            }`}>
-              {/* Dynamic Initial or Placeholder for Tournament Logo */}
-              <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-zinc-800 to-zinc-950">
-                <span className={`text-xl font-black ${activeCategory === t.name ? 'text-emerald-400' : 'text-zinc-600 group-hover:text-white'}`}>
-                  {t.name.charAt(0)}
-                </span>
+            <div className="absolute inset-0 bg-gradient-to-br from-zinc-800 to-zinc-950 flex flex-col items-center justify-center gap-1.5 sm:gap-2">
+              <div className={`p-2 sm:p-3 rounded-full border-2 transition-colors ${activeCategory === 'All' ? 'border-sky-500 bg-sky-500/10' : 'border-zinc-700'}`}>
+                <Play className={`w-4 h-4 sm:w-6 sm:h-6 ${activeCategory === 'All' ? 'text-sky-400 fill-sky-400' : 'text-zinc-500'}`} />
               </div>
-              
-              {/* Status Dot */}
-              <div className="absolute top-1 right-1 w-2 h-2 rounded-full bg-emerald-500 shadow-sm animate-pulse" />
+              <span className={`text-[10px] sm:text-xs font-black uppercase tracking-[0.1em] sm:tracking-[0.2em] ${activeCategory === 'All' ? 'text-sky-400' : 'text-zinc-500'}`}>
+                All Tournaments
+              </span>
             </div>
-            <span className={`text-[10px] font-black uppercase tracking-widest transition-colors ${activeCategory === t.name ? 'text-emerald-400' : 'text-zinc-500 group-hover:text-white'}`}>
-              {t.name}
-            </span>
           </button>
-        ))}
+
+          {/* Tournament Cards */}
+          {tournaments.map((t) => (
+            <button 
+              key={t.id}
+              onClick={() => onSelectCategory(t.name)}
+              className={`group relative w-44 sm:w-64 aspect-[16/9] rounded-xl sm:rounded-2xl overflow-hidden border-2 transition-all duration-500 hover:scale-105 ${
+                activeCategory === t.name 
+                  ? 'border-sky-500 shadow-2xl shadow-sky-500/20' 
+                  : 'border-white/5 bg-zinc-900/50 hover:border-white/20'
+              }`}
+            >
+              {t.logo ? (
+                <div className="absolute inset-0 bg-zinc-950">
+                  <img src={t.logo} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" alt={t.name} />
+                  <div className={`absolute inset-0 bg-black/40 transition-opacity ${activeCategory === t.name ? 'opacity-0' : 'opacity-40 group-hover:opacity-0'}`} />
+                </div>
+              ) : (
+                <div className="absolute inset-0 bg-gradient-to-br from-zinc-800 to-zinc-950 flex items-center justify-center p-4 sm:p-6 text-center">
+                  <span className={`text-base sm:text-xl font-black uppercase tracking-tighter ${activeCategory === t.name ? 'text-sky-400' : 'text-zinc-600 group-hover:text-white'}`}>
+                    {t.name}
+                  </span>
+                </div>
+              )}
+              
+              {/* Active Glow */}
+              {activeCategory === t.name && (
+                <div className="absolute inset-0 ring-4 ring-sky-500/30 rounded-xl sm:rounded-2xl" />
+              )}
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   );

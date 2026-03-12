@@ -1,126 +1,238 @@
-import { ChevronLeft, Play, Share2, Plus, Volume2, Maximize, Clock, Calendar, Eye } from 'lucide-react';
+import { ChevronLeft, Play, Share2, Plus, Volume2, Maximize, Clock, Calendar, Eye, Check } from 'lucide-react';
 import { Match, Tournament } from '../data';
 import VideoCard from './VideoCard';
+import { getThumbnailUrl, getYouTubeId } from '../utils';
+
+import TournamentRail from './TournamentRail';
 
 interface DetailsPageProps {
   match: Match;
   allMatches: Match[];
   tournaments: Tournament[];
+  watchlist: string[];
+  activeCategory: string;
+  onToggleWatchlist: (id: string) => void;
   onBack: () => void;
   onPlay: (match: Match) => void;
+  onSelectCategory: (category: string) => void;
 }
 
-export default function DetailsPage({ match, allMatches, tournaments, onBack, onPlay }: DetailsPageProps) {
+function PlaylistTitle({ title, stage }: { title: string; stage?: string }) {
+  const normalizedTitle = title.replace(/\s+/g, ' ').trim();
+  const segments = normalizedTitle.split('|').map(segment => segment.trim()).filter(Boolean);
+  
+  return (
+    <div className="space-y-1">
+      {stage && (
+        <p className="text-[9px] sm:text-[10px] font-black text-sky-500 uppercase tracking-[0.2em]">
+          {stage.toLowerCase().includes('match') && !stage.includes('-') ? stage.replace(/match\s*(\d+)/i, 'Match - $1') : stage}
+        </p>
+      )}
+      {segments.length >= 2 ? (
+        <>
+          <p className="text-[9px] sm:text-[10px] font-bold text-zinc-500 uppercase tracking-widest truncate">
+            {segments.slice(0, segments.length - 1).join(' | ')}
+          </p>
+          <h4 className="text-[11px] sm:text-[13px] font-black text-zinc-100 leading-tight group-hover:text-sky-400 transition-colors uppercase break-words tracking-tight">
+            {segments[segments.length - 1]}
+          </h4>
+        </>
+      ) : (
+        <h4 className="text-[11px] sm:text-[13px] font-black text-zinc-100 leading-tight group-hover:text-sky-400 transition-colors uppercase break-words tracking-tight">
+          {normalizedTitle}
+        </h4>
+      )}
+    </div>
+  );
+}
+
+export default function DetailsPage({ match, allMatches, tournaments, watchlist, activeCategory, onToggleWatchlist, onBack, onPlay, onSelectCategory }: DetailsPageProps) {
   const tournament = tournaments.find(t => t.id === match.tournamentId);
+  const isWatchlisted = watchlist.includes(match.id);
   const relatedMatches = allMatches.filter(m => m.tournamentId === match.tournamentId && m.id !== match.id);
+  
+  const youtubeId = match.videoType === 'youtube' ? getYouTubeId(match.videoUrl) : null;
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-50 pb-20 animate-in fade-in duration-500">
-      {/* Top Navigation Bar */}
-      <nav className="fixed top-0 w-full z-50 glass-header py-4 px-6 lg:px-12 flex items-center justify-between">
-        <button 
-          onClick={onBack}
-          className="flex items-center gap-2 text-zinc-400 hover:text-white transition-colors group"
-        >
-          <div className="bg-zinc-900 p-2 rounded-xl border border-white/5 group-hover:bg-emerald-500 group-hover:text-zinc-950 transition-all">
-            <ChevronLeft className="w-5 h-5" />
-          </div>
-          <span className="text-xs font-black uppercase tracking-widest">Back to Browse</span>
-        </button>
-        <div className="flex items-center gap-2">
-          <div className="bg-emerald-500 p-1 rounded-lg">
-            <Play className="w-4 h-4 text-zinc-950 fill-zinc-950" />
-          </div>
-          <span className="text-sm font-black tracking-tighter">JBMR SPORTS</span>
+      <main className="pt-4 sm:pt-24 max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-12">
+        {/* Simple Back Navigation */}
+        <div className="mb-4 sm:mb-8">
+          <button 
+            onClick={onBack}
+            className="flex items-center gap-2 text-[10px] font-black text-zinc-400 hover:text-white uppercase tracking-[0.2em] transition-all group"
+          >
+            <div className="bg-zinc-900 p-1.5 sm:p-2 rounded-lg border border-white/5 group-hover:bg-sky-500 group-hover:text-zinc-950 transition-all">
+              <ChevronLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            </div>
+            Back to Browse
+          </button>
         </div>
-      </nav>
 
-      <main className="pt-24 max-w-[1440px] mx-auto px-6 lg:px-12">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-10">
           {/* Main Video Section */}
-          <div className="lg:col-span-2 space-y-8">
-            <div className="relative aspect-video rounded-3xl overflow-hidden bg-zinc-900 shadow-2xl ring-1 ring-white/10 group">
-              <video 
-                src={match.videoUrl} 
-                className="w-full h-full object-cover"
-                controls
-                autoPlay
-              />
+          <div className="lg:col-span-7 space-y-4 sm:space-y-8">
+            <div className="relative aspect-video rounded-2xl sm:rounded-3xl overflow-hidden bg-zinc-900 shadow-2xl ring-1 ring-white/10 group">
+              {match.videoType === 'youtube' && youtubeId ? (
+                <iframe 
+                  src={`https://www.youtube.com/embed/${youtubeId}?autoplay=1&rel=0&modestbranding=1`}
+                  className="w-full h-full border-0"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                />
+              ) : (
+                <video 
+                  src={match.videoUrl} 
+                  className="w-full h-full object-cover"
+                  controls
+                  autoPlay
+                />
+              )}
             </div>
 
-            <div className="space-y-6">
-              <div className="flex flex-wrap items-center gap-4">
-                <span className="px-3 py-1 bg-emerald-500 text-zinc-950 text-[10px] font-black rounded-md uppercase tracking-widest shadow-lg shadow-emerald-500/20">
+            <div className="space-y-4 sm:space-y-6">
+              <div className="flex flex-wrap items-center gap-3 sm:gap-4">
+                <span className="px-2 sm:px-3 py-0.5 sm:py-1 bg-sky-500 text-zinc-950 text-[9px] sm:text-[10px] font-black rounded-md uppercase tracking-widest shadow-lg shadow-sky-500/20">
                   {tournament?.name || match.tournament} {tournament?.year}
                 </span>
-                <div className="flex items-center gap-4 text-xs font-bold text-zinc-500 uppercase tracking-widest">
-                  <span className="flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5" /> {match.date}</span>
-                  <span className="flex items-center gap-1.5"><Clock className="w-3.5 h-3.5" /> {match.duration}</span>
-                  <span className="flex items-center gap-1.5"><Eye className="w-3.5 h-3.5" /> {match.views} Views</span>
+                <div className="flex flex-wrap items-center gap-3 sm:gap-4 text-[10px] sm:text-xs font-bold text-zinc-500 uppercase tracking-widest">
+                  <span className="flex items-center gap-1.5 whitespace-nowrap"><Calendar className="w-3 sm:w-3.5 h-3 sm:h-3.5" /> {match.date}</span>
+                  <span className="flex items-center gap-1.5 whitespace-nowrap"><Clock className="w-3 sm:w-3.5 h-3 sm:h-3.5" /> {match.duration}</span>
+                  <span className="flex items-center gap-1.5 whitespace-nowrap"><Eye className="w-3 sm:w-3.5 h-3 sm:h-3.5" /> {match.views}</span>
+                  <span className="px-1.5 py-0.5 bg-zinc-800 text-zinc-300 rounded text-[9px] font-black uppercase tracking-widest border border-white/5">
+                    {match.quality || '4K'}
+                  </span>
                 </div>
               </div>
 
-              <h1 className="text-4xl lg:text-5xl font-black text-white tracking-tighter">
+              <h1 className="text-2xl sm:text-4xl lg:text-5xl font-black text-white tracking-tighter leading-tight">
                 {match.title}
               </h1>
 
-              <div className="flex items-center gap-4 py-2">
-                <button className="flex items-center gap-2 px-6 py-3 bg-white text-zinc-950 rounded-xl font-black hover:bg-emerald-400 transition-all uppercase tracking-widest text-xs">
-                  <Plus className="w-4 h-4" /> Add to Watchlist
+              <div className="flex items-center gap-3 sm:gap-4 py-1 sm:py-2">
+                <button 
+                  onClick={() => onToggleWatchlist(match.id)}
+                  className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 sm:px-6 py-2.5 sm:py-3 rounded-lg sm:rounded-xl font-black transition-all uppercase tracking-widest text-[10px] sm:text-xs ${
+                    isWatchlisted 
+                      ? 'bg-sky-500 text-zinc-950 hover:bg-sky-400' 
+                      : 'bg-white text-zinc-950 hover:bg-sky-400'
+                  }`}
+                >
+                  {isWatchlisted ? <Check className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> : <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
+                  {isWatchlisted ? 'Watchlisted' : 'Watchlist'}
                 </button>
-                <button className="p-3 bg-zinc-900 border border-white/10 rounded-xl text-zinc-400 hover:text-white transition-all">
-                  <Share2 className="w-5 h-5" />
+                <button 
+                  onClick={() => {
+                    if (navigator.share) {
+                      navigator.share({
+                        title: match.title,
+                        text: match.description,
+                        url: window.location.href,
+                      });
+                    } else {
+                      alert('Share link copied to clipboard!');
+                      navigator.clipboard.writeText(window.location.href);
+                    }
+                  }}
+                  className="p-2.5 sm:p-3 bg-zinc-900 border border-white/10 rounded-lg sm:rounded-xl text-zinc-400 hover:text-white transition-all"
+                >
+                  <Share2 className="w-4 h-4 sm:w-5 sm:h-5" />
                 </button>
               </div>
 
-              <div className="p-8 bg-zinc-900/40 rounded-3xl border border-white/5 space-y-4">
-                <h3 className="text-xs font-black text-zinc-500 uppercase tracking-[0.2em]">Match Description</h3>
-                <p className="text-lg text-zinc-300 leading-relaxed font-medium">
+              <div className="p-5 sm:p-8 bg-zinc-900/40 rounded-2xl sm:rounded-3xl border border-white/5 space-y-2 sm:space-y-4">
+                <h3 className="text-[10px] sm:text-xs font-black text-zinc-500 uppercase tracking-[0.2em]">Description</h3>
+                <p className="text-sm sm:text-lg text-zinc-300 leading-relaxed font-medium">
                   {match.description}
                 </p>
               </div>
             </div>
           </div>
 
-          {/* Related Sidebar */}
-          <div className="space-y-8">
-            <div className="flex items-center justify-between">
-              <h2 className="text-xl font-black text-white tracking-tighter uppercase">More from this Tournament</h2>
+          {/* Related Sidebar - Playlist Style */}
+          <div className="lg:col-span-5 space-y-4 sm:space-y-6">
+            <div className="flex items-center justify-between px-1 sm:px-2">
+              <div className="space-y-1">
+                <h2 className="text-lg sm:text-xl font-black text-white tracking-tighter uppercase">Playlist</h2>
+                <div className="h-0.5 w-8 bg-sky-500 rounded-full" />
+              </div>
+              <span className="text-[9px] sm:text-[10px] font-black text-zinc-500 uppercase tracking-widest bg-zinc-900 px-2 sm:py-1 rounded-md border border-white/5">
+                {relatedMatches.length + 1} Videos
+              </span>
             </div>
             
-            <div className="space-y-6">
-              {relatedMatches.length > 0 ? (
-                relatedMatches.map(m => (
-                  <div 
-                    key={m.id} 
-                    onClick={() => onPlay(m)}
-                    className="group flex gap-4 cursor-pointer"
-                  >
-                    <div className="relative flex-none w-40 aspect-video rounded-xl overflow-hidden bg-zinc-900 ring-1 ring-white/5 group-hover:ring-emerald-500/30 transition-all">
-                      <img src={m.thumbnail} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
-                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                        <Play className="w-6 h-6 text-white fill-white" />
-                      </div>
-                    </div>
-                    <div className="space-y-1">
-                      <h4 className="text-sm font-bold text-zinc-100 line-clamp-2 group-hover:text-emerald-400 transition-colors leading-tight">
-                        {m.title}
-                      </h4>
-                      <div className="flex items-center gap-2 text-[10px] font-black text-zinc-500 uppercase tracking-widest">
-                        <span>{m.duration}</span>
-                        <span>•</span>
-                        <span>{m.date}</span>
+            <div className="bg-zinc-900/30 rounded-2xl sm:rounded-3xl border border-white/5 overflow-hidden">
+              <div className="max-h-[500px] sm:max-h-[700px] overflow-y-auto hide-scrollbar">
+                {/* Currently Playing Indicator */}
+                <div className="p-2 sm:p-3 bg-sky-500/10 border-b border-white/5 flex gap-3 sm:gap-4 relative">
+                  <div className="absolute left-0 top-0 bottom-0 w-1 bg-sky-500" />
+                  <div className="relative flex-none w-24 sm:w-32 aspect-video rounded-lg sm:rounded-xl overflow-hidden bg-zinc-900 shadow-xl shadow-black/40">
+                    {getThumbnailUrl(match) ? (
+                      <img src={getThumbnailUrl(match)!} className="w-full h-full object-cover opacity-50" />
+                    ) : (
+                      <div className="w-full h-full bg-zinc-800" />
+                    )}
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <div className="flex gap-0.5 items-end h-3">
+                        <div className="w-0.5 h-full bg-sky-500 animate-bounce" style={{ animationDelay: '0s' }} />
+                        <div className="w-0.5 h-2/3 bg-sky-500 animate-bounce" style={{ animationDelay: '0.1s' }} />
+                        <div className="w-0.5 h-full bg-sky-500 animate-bounce" style={{ animationDelay: '0.2s' }} />
                       </div>
                     </div>
                   </div>
-                ))
-              ) : (
-                <div className="p-12 text-center bg-zinc-900/20 rounded-3xl border border-dashed border-white/10">
-                  <p className="text-xs font-black text-zinc-600 uppercase tracking-widest">No more highlights</p>
+                  <div className="min-w-0 flex-1 flex flex-col justify-center">
+                    <p className="text-[8px] sm:text-[9px] font-black text-sky-500 uppercase tracking-[0.2em] mb-0.5 sm:mb-1">Now Playing</p>
+                    <PlaylistTitle title={match.title} stage={match.stage} />
+                  </div>
                 </div>
-              )}
+
+                <div className="p-1 sm:p-2 space-y-0.5 sm:space-y-1">
+                  {relatedMatches.length > 0 ? (
+                    relatedMatches.map(m => (
+                      <div 
+                        key={m.id} 
+                        onClick={() => onPlay(m)}
+                        className="group flex gap-3 sm:gap-4 p-1.5 sm:p-2.5 rounded-xl sm:rounded-2xl hover:bg-white/5 transition-all cursor-pointer"
+                      >
+                        <div className="relative flex-none w-24 sm:w-32 aspect-video rounded-lg sm:rounded-xl overflow-hidden bg-zinc-900 ring-1 ring-white/5 group-hover:ring-sky-500/30 transition-all shadow-lg">
+                          {getThumbnailUrl(m) ? (
+                            <img src={getThumbnailUrl(m)!} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                          ) : (
+                            <div className="w-full h-full bg-zinc-800 flex items-center justify-center">
+                              <Play className="w-4 sm:w-6 h-4 sm:h-6 text-zinc-700" />
+                            </div>
+                          )}
+                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                            <Play className="w-4 sm:w-5 h-4 sm:w-5 text-white fill-white" />
+                          </div>
+                        </div>
+                        <div className="min-w-0 flex-1 flex flex-col justify-center py-0.5 sm:py-1">
+                          <PlaylistTitle title={m.title} stage={m.stage} />
+                          <div className="flex items-center gap-1.5 sm:gap-2 mt-1 sm:mt-1.5 text-[9px] sm:text-[10px] font-black text-zinc-500 uppercase tracking-widest">
+                            <Clock className="w-2.5 sm:w-3 h-2.5 sm:h-3" />
+                            <span>{m.duration}</span>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="p-6 sm:p-8 text-center">
+                      <p className="text-[10px] sm:text-xs font-black text-zinc-600 uppercase tracking-widest">No more highlights</p>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
+        </div>
+
+        {/* Popular Tournaments in Details Page */}
+        <div className="mt-12 sm:mt-20">
+          <TournamentRail 
+            tournaments={tournaments} 
+            activeCategory={activeCategory} 
+            onSelectCategory={onSelectCategory} 
+          />
         </div>
       </main>
     </div>

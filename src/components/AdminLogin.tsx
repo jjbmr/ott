@@ -56,7 +56,7 @@ export default function AdminLogin({ onLogin, onCancel }: AdminLoginProps) {
       <div className="w-full max-w-md space-y-8 bg-zinc-900 p-8 rounded-2xl border border-white/10">
         <div className="text-center">
           <div className="flex justify-center">
-            <div className="bg-emerald-500 p-3 rounded-2xl mb-4">
+            <div className="bg-sky-500 p-3 rounded-2xl mb-4">
               <Play className="w-8 h-8 text-zinc-950 fill-zinc-950" />
             </div>
           </div>

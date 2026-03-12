@@ -3,7 +3,18 @@ export type Sport = 'Cricket';
 export interface Tournament {
   id: string;
   name: string;
+  shortName: string;
   year: string;
+  logo?: string;
+}
+
+export interface Ad {
+  id: string;
+  title: string;
+  videoUrl: string;
+  active: boolean;
+  linkUrl?: string;
+  type: 'video' | 'aston';
 }
 
 export interface Match {
@@ -12,19 +23,23 @@ export interface Match {
   sport: Sport;
   tournamentId: string;
   tournament?: string;
+  tournamentShortName?: string;
   stage?: string;
   thumbnail: string;
   videoUrl: string;
+  videoType?: 'mp4' | 'youtube';
   duration: string;
   date: string;
+  time?: string;
+  quality?: '4K' | 'Full HD';
   views: string;
   description: string;
   featured?: boolean;
 }
 
 export const tournaments: Tournament[] = [
-  { id: 't1', name: 'Asia Cup', year: '2023' },
-  { id: 't2', name: 'The Ashes', year: '2023' }
+  { id: 't1', name: 'Asia Cup', shortName: 'Asia Cup', year: '2023' },
+  { id: 't2', name: 'The Ashes', shortName: 'Ashes', year: '2023' }
 ];
 
 export const matches: Match[] = [
