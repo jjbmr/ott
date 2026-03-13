@@ -146,6 +146,20 @@ export default function DetailsPage({ match, allMatches, tournaments, watchlist,
                   {match.description}
                 </p>
               </div>
+
+              {match.scoreCardId && (
+                <div className="p-5 sm:p-8 bg-zinc-900/40 rounded-2xl sm:rounded-3xl border border-white/5 space-y-4">
+                  <h3 className="text-[9px] sm:text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em]">Live Scorecard</h3>
+                  <div className="w-full h-[500px] rounded-xl overflow-hidden bg-white/5">
+                    <iframe
+                      src={`https://www.cricket.com.au/matches/${match.scoreCardId}`}
+                      className="w-full h-full border-0 grayscale invert opacity-80"
+                      title="Cricket Scorecard"
+                    />
+                  </div>
+                  <p className="text-[8px] text-zinc-600 uppercase tracking-widest text-center italic">Scorecard data provided by third-party API</p>
+                </div>
+              )}
             </div>
           </div>
 

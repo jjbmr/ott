@@ -333,7 +333,8 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
       quality: newMatch.quality || '4K',
       views: '0',
       description: newMatch.description || '',
-      featured: newMatch.featured || false
+      featured: newMatch.featured || false,
+      scoreCardId: newMatch.scoreCardId || ''
     };
 
     await set(ref(db, `matches/${matchToAdd.id}`), {
@@ -797,6 +798,15 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                     <option value="4K">4K Ultra HD</option>
                     <option value="Full HD">Full HD 1080p</option>
                   </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-zinc-500">Scorecard Match ID (Cricket API)</label>
+                  <input
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-sky-500"
+                    placeholder="e.g., 123456"
+                    value={newMatch.scoreCardId || ''}
+                    onChange={e => setNewMatch({ ...newMatch, scoreCardId: e.target.value })}
+                  />
                 </div>
                 <div className="space-y-2 lg:col-span-2">
                   <label className="text-sm font-medium text-zinc-500">Description</label>

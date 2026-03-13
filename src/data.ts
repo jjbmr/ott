@@ -35,6 +35,7 @@ export interface Match {
   views: string;
   description: string;
   featured?: boolean;
+  scoreCardId?: string;
 }
 
 export const tournaments: Tournament[] = [
