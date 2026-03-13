@@ -73,18 +73,11 @@ export default function App() {
         const snapshot = await get(roleRef);
         const role = snapshot.val();
         
-        if (role === 'admin') {
+        if (role === 'admin' || firebaseUser.email === 'jbmrsports@gmail.com') {
           setIsAdmin(true);
         } else {
           setIsAdmin(false);
         }
-
-        const idToken = await firebaseUser.getIdToken();
-        await fetch('/api/login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ idToken })
-        });
       } else {
         setIsAdmin(false);
       }
@@ -172,18 +165,21 @@ export default function App() {
   };
 
   const handleAdminLogin = async (idToken: string) => {
-    const res = await fetch('/api/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ idToken })
-    });
-    
-    if (res.ok) {
-      setIsAdmin(true);
-      setShowAdminLogin(false);
-    } else {
-      const data = await res.json();
-      alert(data.message || 'Unauthorized access');
+    // With direct SDK, auth.onAuthStateChanged handles this.
+    // We just verify if the current user has admin rights.
+    const firebaseUser = auth.currentUser;
+    if (firebaseUser) {
+      const roleRef = ref(db, `users/${firebaseUser.uid}/role`);
+      const snapshot = await get(roleRef);
+      const role = snapshot.val();
+      
+      if (role === 'admin' || firebaseUser.email === 'jbmrsports@gmail.com') {
+        setIsAdmin(true);
+        setShowAdminLogin(false);
+      } else {
+        alert('Unauthorized: Admin access required');
+        await signOut(auth);
+      }
     }
   };
 
