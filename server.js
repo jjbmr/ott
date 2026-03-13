@@ -44,14 +44,6 @@ app.use(cors({
 }));
 app.use(express.json());
 
-// Check Firebase Admin initialization
-app.use((req, res, next) => {
-  if (req.url.startsWith('/api') && (!adminAuth || !rtdb)) {
-    return res.status(503).json({ success: false, message: 'Backend service unavailable (Firebase Admin not initialized)' });
-  }
-  next();
-});
-
 // Request logging middleware
 app.use((req, res, next) => {
   console.log(`${new Date().toISOString()} ${req.method} ${req.url}`);
