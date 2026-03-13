@@ -8,17 +8,28 @@ import fs from 'fs';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Initialize Firebase Admin
-const serviceAccount = JSON.parse(
-  fs.readFileSync(path.join(__dirname, 'firebase-service-account.json'), 'utf8')
-);
+let serviceAccount;
+try {
+  if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+    serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+  } else {
+    serviceAccount = JSON.parse(
+      fs.readFileSync(path.join(__dirname, 'firebase-service-account.json'), 'utf8')
+    );
+  }
+} catch (error) {
+  console.warn('Warning: firebase-service-account.json not found and FIREBASE_SERVICE_ACCOUNT env var not set. Backend API will be limited.');
+}
 
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
-  databaseURL: 'https://jbmrsportslive-default-rtdb.asia-southeast1.firebasedatabase.app'
-});
+if (serviceAccount) {
+  admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount),
+    databaseURL: 'https://jbmrsportslive-default-rtdb.asia-southeast1.firebasedatabase.app'
+  });
+}
 
-const rtdb = admin.database();
-const adminAuth = admin.auth();
+const rtdb = serviceAccount ? admin.database() : null;
+const adminAuth = serviceAccount ? admin.auth() : null;
 
 // List of admin emails
 const ADMIN_EMAILS = [
@@ -32,6 +43,14 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 app.use(express.json());
+
+// Check Firebase Admin initialization
+app.use((req, res, next) => {
+  if (req.url.startsWith('/api') && (!adminAuth || !rtdb)) {
+    return res.status(503).json({ success: false, message: 'Backend service unavailable (Firebase Admin not initialized)' });
+  }
+  next();
+});
 
 // Request logging middleware
 app.use((req, res, next) => {
@@ -64,6 +83,10 @@ const authenticate = async (req, res, next) => {
 
 // Seed Initial Professional Demo Data
 const seedData = async () => {
+  if (!rtdb) {
+    console.log('Skipping seedData: Firebase Admin not initialized.');
+    return;
+  }
   const tSnapshot = await rtdb.ref('tournaments').once('value');
   const mSnapshot = await rtdb.ref('matches').once('value');
   
@@ -222,6 +245,14 @@ app.post('/api/login', async (req, res) => {
     console.error('Error verifying token:', error);
     res.status(401).json({ success: false, message: 'Invalid ID Token' });
   }
+});
+
+// Static Files & Frontend Routing
+app.use(express.static(path.join(__dirname, 'dist')));
+
+app.get('*', (req, res) => {
+  if (req.url.startsWith('/api')) return res.status(404).json({ success: false, message: 'API endpoint not found' });
+  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
 
 const PORT = 5000;
