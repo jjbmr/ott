@@ -347,7 +347,6 @@ export default function App() {
 
   return (
     <div className="min-h-screen text-zinc-50 font-sans selection:bg-sky-500/30 overflow-x-hidden">
-      <LiveTicker />
       {ads.filter(a => a.active).map(ad => (
         <AdBanner key={ad.id} ad={ad} />
       ))}
@@ -449,6 +448,8 @@ export default function App() {
                 No highlights available
               </div>
             )}
+
+            <LiveTicker />
 
             {/* Desktop Tournament Rail */}
             <div className="hidden sm:block">

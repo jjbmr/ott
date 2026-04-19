@@ -114,7 +114,7 @@ export default function Hero({ matches, onPlay }: HeroProps) {
           </div>
 
           {/* Hero Content - Perfectly Aligned */}
-          <div className="relative z-10 max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-12 w-full h-full flex items-center pt-6 sm:pt-0 bg-zinc-950 sm:bg-transparent pb-8 sm:pb-0">
+          <div className="relative z-10 max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-12 w-full h-full flex items-center pt-6 sm:pt-0 bg-zinc-950 sm:bg-transparent pb-4 sm:pb-0">
             <div className="max-w-3xl space-y-3 sm:space-y-6 w-full">
               <motion.div 
                 initial={{ opacity: 0, y: 20 }}
@@ -283,7 +283,7 @@ export default function Hero({ matches, onPlay }: HeroProps) {
       </div>
       
       {/* Mobile Navigation Dots (Centered) */}
-      <div className="sm:hidden flex gap-1.5 py-4 justify-center bg-zinc-950">
+      <div className="sm:hidden flex gap-1.5 pb-4 justify-center bg-zinc-950">
         {matches.map((_, idx) => (
           <button
             key={idx}
