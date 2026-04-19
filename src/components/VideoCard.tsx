@@ -65,6 +65,27 @@ export default function VideoCard({ match, onPlay }: VideoCardProps) {
         <div className="absolute bottom-3 right-3 px-2 py-1 bg-zinc-950/80 text-white text-[10px] font-black rounded-md backdrop-blur-md border border-white/10 tracking-widest group-hover:opacity-0 transition-opacity duration-300">
           {match.duration}
         </div>
+
+        {/* Live Score Overlay - Small Professional Badge */}
+        {(match.liveScore || match.scoreCardId) && (
+          <div className="absolute top-3 left-3 flex flex-col gap-1 pointer-events-none group-hover:opacity-0 transition-opacity duration-300">
+            {match.liveScore && (
+              <div className="bg-zinc-950/80 backdrop-blur-md border border-white/10 rounded-lg px-2 py-1.5 space-y-1 min-w-[80px]">
+                <div className="flex items-center justify-between gap-4">
+                  <span className="text-[9px] font-black text-zinc-400">{match.liveScore.team1.name}</span>
+                  <span className="text-[9px] font-black text-white">{match.liveScore.team1.score}</span>
+                </div>
+                <div className="flex items-center justify-between gap-4">
+                  <span className="text-[9px] font-black text-zinc-400">{match.liveScore.team2.name}</span>
+                  <span className="text-[9px] font-black text-white">{match.liveScore.team2.score}</span>
+                </div>
+              </div>
+            )}
+            <div className="bg-red-500 text-zinc-950 text-[7px] font-black uppercase tracking-[0.2em] px-1.5 py-0.5 rounded self-start animate-pulse">
+              Live
+            </div>
+          </div>
+        )}
         
         {/* Progress Bar (Simulated Continue Watching) */}
         <div className="absolute bottom-0 left-0 h-1 bg-zinc-800 w-full opacity-60">

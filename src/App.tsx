@@ -10,12 +10,14 @@ import AuthModal from './components/AuthModal';
 import AdminDashboard from './components/AdminDashboard';
 import TournamentRail from './components/TournamentRail';
 import AdBanner from './components/AdBanner';
-import { Match, Tournament, Ad, matches as mockMatches, tournaments as mockTournaments } from './data';
+import FixtureRow from './components/FixtureRow';
+import { Match, Tournament, Ad, Sport, Fixture, Standing, matches as mockMatches, tournaments as mockTournaments } from './data';
 import { getThumbnailUrl } from './utils';
 
-import { auth, db } from './firebase';
+import { auth, db, messaging } from './firebase';
 import { signOut } from 'firebase/auth';
-import { ref, get } from 'firebase/database';
+import { ref, get, set } from 'firebase/database';
+import { getToken, onMessage } from 'firebase/messaging';
 
 export default function App() {
   const navbarRef = useRef<NavbarHandle>(null);
@@ -38,28 +40,79 @@ export default function App() {
   const [notifications, setNotifications] = useState<Match[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
   const [watchlist, setWatchlist] = useState<string[]>([]);
+  const [history, setHistory] = useState<string[]>([]);
   const [ads, setAds] = useState<Ad[]>([]);
   
   const [matches, setMatches] = useState<Match[]>(mockMatches);
   const [tournaments, setTournaments] = useState<Tournament[]>(mockTournaments);
+  const [sports, setSports] = useState<Sport[]>([]);
+  const [fixtures, setFixtures] = useState<Fixture[]>([]);
+  const [standings, setStandings] = useState<Standing[]>([]);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
 
   useEffect(() => {
-    const params = new URLSearchParams();
-    if (activeCategory !== 'All') params.set('category', activeCategory);
-    if (showDashboard) params.set('view', 'dashboard');
-    if (searchQuery) params.set('q', searchQuery);
-    if (selectedMatch) params.set('matchId', selectedMatch.id);
-    
-    const newRelativePathQuery = window.location.pathname + (params.toString() ? '?' + params.toString() : '');
-    window.history.replaceState(null, '', newRelativePathQuery);
-  }, [activeCategory, showDashboard, searchQuery, selectedMatch]);
+    const handleBeforeInstallPrompt = (e: any) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
+    // Setup FCM
+    const setupFCM = async () => {
+      if (!messaging) return;
+      
+      try {
+        const permission = await Notification.requestPermission();
+        if (permission === 'granted') {
+          const token = await getToken(messaging, { 
+            vapidKey: 'BGHQ_oVn_Q8L9W5Z-6N1YjYy8_8-0-0-0-0-0-0-0-0-0' // placeholder, will try without first or user might need to provide
+          });
+          if (token) {
+            console.log('FCM Token:', token);
+            localStorage.setItem('fcm_token', token);
+          }
+        }
+      } catch (error) {
+        console.error('FCM Setup error:', error);
+      }
+    };
+
+    setupFCM();
+
+    // Listen for foreground messages
+    if (messaging) {
+      onMessage(messaging, (payload) => {
+        console.log('Message received. ', payload);
+        // Custom foreground notification logic could go here
+      });
+    }
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    };
+  }, []);
+
+  const handleInstallClick = async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === 'accepted') {
+      setDeferredPrompt(null);
+    }
+  };
 
   useEffect(() => {
     fetchData();
 
-    // Load watchlist from localStorage
+    // Load local watchlist first
     const savedWatchlist = JSON.parse(localStorage.getItem('user_watchlist') || '[]');
     setWatchlist(savedWatchlist);
+
+    // Load local history
+    const savedHistory = JSON.parse(localStorage.getItem('user_history') || '[]');
+    setHistory(savedHistory);
 
     const handleToggleDashboard = () => setShowDashboard(prev => !prev);
     window.addEventListener('toggle-admin-dashboard', handleToggleDashboard);
@@ -68,7 +121,25 @@ export default function App() {
     const unsubscribe = auth.onAuthStateChanged(async (firebaseUser) => {
       setUser(firebaseUser);
       if (firebaseUser) {
-        // Check admin role in Realtime Database
+        // Sync watchlist from Firebase
+        const watchlistRef = ref(db, `users/${firebaseUser.uid}/watchlist`);
+        const wSnapshot = await get(watchlistRef);
+        if (wSnapshot.exists()) {
+          const cloudWatchlist = wSnapshot.val();
+          setWatchlist(cloudWatchlist);
+          localStorage.setItem('user_watchlist', JSON.stringify(cloudWatchlist));
+        }
+
+        // Sync history from Firebase
+        const historyRef = ref(db, `users/${firebaseUser.uid}/history`);
+        const hSnapshot = await get(historyRef);
+        if (hSnapshot.exists()) {
+          const cloudHistory = hSnapshot.val();
+          setHistory(cloudHistory);
+          localStorage.setItem('user_history', JSON.stringify(cloudHistory));
+        }
+
+        // Check admin role
         const roleRef = ref(db, `users/${firebaseUser.uid}/role`);
         const snapshot = await get(roleRef);
         const role = snapshot.val();
@@ -77,6 +148,12 @@ export default function App() {
           setIsAdmin(true);
         } else {
           setIsAdmin(false);
+        }
+
+        // Store FCM Token for user
+        const fcmToken = localStorage.getItem('fcm_token');
+        if (fcmToken) {
+          set(ref(db, `users/${firebaseUser.uid}/fcmToken`), fcmToken);
         }
       } else {
         setIsAdmin(false);
@@ -97,10 +174,13 @@ export default function App() {
 
   const fetchData = async () => {
     try {
-      const [tSnapshot, mSnapshot, aSnapshot] = await Promise.all([
+      const [tSnapshot, mSnapshot, aSnapshot, sSnapshot, fSnapshot, stSnapshot] = await Promise.all([
         get(ref(db, 'tournaments')),
         get(ref(db, 'matches')),
-        get(ref(db, 'ads'))
+        get(ref(db, 'ads')),
+        get(ref(db, 'sports')),
+        get(ref(db, 'fixtures')),
+        get(ref(db, 'standings'))
       ]);
 
       const tournamentsList = tSnapshot.exists()
@@ -112,6 +192,19 @@ export default function App() {
       const adsList = aSnapshot.exists()
         ? (Object.values(aSnapshot.val()) as Ad[])
         : [];
+      const sportsList = sSnapshot.exists()
+        ? (Object.values(sSnapshot.val()) as Sport[])
+        : [];
+      const fixturesList = fSnapshot.exists()
+        ? (Object.values(fSnapshot.val()) as Fixture[])
+        : [];
+      const standingsList = stSnapshot.exists()
+        ? (Object.values(stSnapshot.val()) as Standing[])
+        : [];
+
+      setSports(sportsList);
+      setFixtures(fixturesList);
+      setStandings(standingsList);
 
       const fetchedMatches = matchesList.length
         ? matchesList.map(match => ({ ...match, featured: !!match.featured }))
@@ -142,8 +235,10 @@ export default function App() {
           setSelectedMatch({ ...match, tournament: t?.name || '' });
         }
       }
+      setIsInitialLoad(false);
     } catch (error) {
       console.error('Failed to fetch data:', error);
+      setIsInitialLoad(false);
     }
   };
 
@@ -154,17 +249,39 @@ export default function App() {
     setShowNotifications(false);
   };
 
-  const toggleWatchlist = (matchId: string) => {
+  const toggleWatchlist = async (matchId: string) => {
+    let next: string[];
     setWatchlist(prev => {
-      const next = prev.includes(matchId) 
+      next = prev.includes(matchId) 
         ? prev.filter(id => id !== matchId) 
         : [...prev, matchId];
+      
       localStorage.setItem('user_watchlist', JSON.stringify(next));
+      
+      // Sync to Firebase if logged in
+      if (user) {
+        import('firebase/database').then(({ ref, set }) => {
+          set(ref(db, `users/${user.uid}/watchlist`), next);
+        });
+      }
+      
       return next;
     });
   };
 
   const handlePlayMatch = (match: Match) => {
+    // Add to history
+    setHistory(prev => {
+      const next = [match.id, ...prev.filter(id => id !== match.id)].slice(0, 10);
+      localStorage.setItem('user_history', JSON.stringify(next));
+      if (user) {
+        import('firebase/database').then(({ ref, set }) => {
+          set(ref(db, `users/${user.uid}/history`), next);
+        });
+      }
+      return next;
+    });
+
     const tournamentName = tournaments.find(t => t.id === match.tournamentId)?.name || '';
     setSelectedMatch({ ...match, tournament: tournamentName });
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -189,12 +306,14 @@ export default function App() {
     } else if (activeCategory === 'Watchlist') {
       categoryMatch = watchlist.includes(m.id);
     } else {
-      categoryMatch = tournaments.find(tour => tour.id === m.tournamentId)?.name === activeCategory;
+      // Check for sport ID match or tournament ID match
+      categoryMatch = m.sportId === activeCategory || m.tournamentId === activeCategory;
     }
 
     const searchMatch = !searchQuery || 
       m.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      tournaments.find(t => t.id === m.tournamentId)?.name.toLowerCase().includes(searchQuery.toLowerCase());
+      tournaments.find(t => t.id === m.tournamentId)?.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      sports.find(s => s.id === m.sportId)?.name.toLowerCase().includes(searchQuery.toLowerCase());
     return categoryMatch && searchMatch;
   });
 
@@ -217,10 +336,15 @@ export default function App() {
         onDashboardClick={() => setShowDashboard(true)}
         onLogout={handleLogout}
         tournaments={tournaments}
+        sports={sports}
+        matches={matches}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
         notificationCount={notifications.length}
         onNotificationClick={() => setShowNotifications(!showNotifications)}
+        onPlayMatch={handlePlayMatch}
+        onInstallClick={handleInstallClick}
+        showInstallButton={!!deferredPrompt}
       />
 
       {showNotifications && (
@@ -246,7 +370,7 @@ export default function App() {
                   className="p-4 hover:bg-white/5 transition-colors cursor-pointer flex gap-3 border-b border-white/5 last:border-0"
                 >
                   {getThumbnailUrl(match) ? (
-                    <img src={getThumbnailUrl(match)!} className="w-16 h-10 object-cover rounded-lg flex-shrink-0" />
+                    <img src={getThumbnailUrl(match)!} className="w-16 h-10 object-cover rounded-lg flex-shrink-0" loading="lazy" />
                   ) : (
                     <div className="w-16 h-10 bg-zinc-800 rounded-lg flex-shrink-0 flex items-center justify-center">
                       <Play className="w-4 h-4 text-zinc-600" />
@@ -312,8 +436,24 @@ export default function App() {
             <div className="mt-4 space-y-12">
               {activeCategory === 'All' ? (
                 <>
+                  {/* Continue Watching */}
+                  {history.length > 0 && (
+                    <div className="relative pt-4">
+                      <VideoRow 
+                        title="Continue Watching" 
+                        matches={history.map(id => matches.find(m => m.id === id)).filter(Boolean).map(m => ({
+                          ...m!,
+                          tournament: tournaments.find(t => t.id === m!.tournamentId)?.name || ''
+                        }))} 
+                        onPlay={handlePlayMatch} 
+                      />
+                    </div>
+                  )}
+
                   {/* Trending & Tournament Rows */}
                   <div className="relative pt-4 space-y-4">
+                    <FixtureRow fixtures={fixtures} tournaments={tournaments} />
+                    
                     <VideoRow 
                       title="Trending Now" 
                       matches={[...matches].sort(() => 0.5 - Math.random()).slice(0, 12).map(m => ({

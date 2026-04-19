@@ -1,7 +1,7 @@
 {
-  "name": "SportsPlex OTT",
-  "short_name": "SportsPlex",
-  "description": "Premium sports highlights platform",
+  "name": "JBMR Sports",
+  "short_name": "JBMR Sports",
+  "description": "Premium live sports and highlights platform",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#09090b",

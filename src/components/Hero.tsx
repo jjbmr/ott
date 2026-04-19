@@ -235,13 +235,14 @@ export default function Hero({ matches, onPlay }: HeroProps) {
                       src={`https://img.youtube.com/vi/${getYouTubeId(m.videoUrl)}/mqdefault.jpg`} 
                       className="w-full h-full object-cover" 
                       alt="Preview" 
+                      loading="lazy"
                     />
                   ) : (
                     <video src={m.videoUrl} className="w-full h-full object-cover" muted />
                   )}
                 </div>
               ) : (
-                <img src={m.thumbnail} className="w-full h-full object-cover" alt="Preview" />
+                <img src={m.thumbnail} className="w-full h-full object-cover" alt="Preview" loading="lazy" />
               )}
               {idx === currentIndex && (
                 <div className="absolute inset-0 bg-sky-500/20 flex items-center justify-center">

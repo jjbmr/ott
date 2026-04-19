@@ -73,71 +73,41 @@ const authenticate = async (req, res, next) => {
   }
 };
 
-// Seed Initial Professional Demo Data
-const seedData = async () => {
-  if (!rtdb) {
-    console.log('Skipping seedData: Firebase Admin not initialized.');
-    return;
-  }
-  const tSnapshot = await rtdb.ref('tournaments').once('value');
-  const mSnapshot = await rtdb.ref('matches').once('value');
-  
-  if (!tSnapshot.exists()) {
-    console.log('Seeding tournaments to Firebase...');
-    const tournaments = {
-      't1': { id: 't1', name: 'IPL', year: '2024' },
-      't2': { id: 't2', name: 'ICC World Cup', year: '2023' },
-      't3': { id: 't3', name: 'Asia Cup', year: '2023' }
-    };
-    await rtdb.ref('tournaments').set(tournaments);
-  }
+// API Endpoints: Sports
+app.get('/api/sports', async (req, res) => {
+  const snapshot = await rtdb.ref('sports').once('value');
+  const data = snapshot.val() || {};
+  res.json(Object.values(data));
+});
 
-  if (!mSnapshot.exists()) {
-    console.log('Seeding matches to Firebase...');
-    const matches = {
-      'm1': {
-        id: 'm1',
-        title: 'KKR vs SRH - IPL 2024 Final Highlights',
-        tournamentId: 't1',
-        thumbnail: 'https://images.unsplash.com/photo-1531415074968-036ba1b575da?auto=format&fit=crop&q=80&w=1920',
-        videoUrl: 'https://storage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
-        duration: '15:20',
-        date: 'Recent',
-        description: 'KKR clinches their third title with a dominant performance against SRH in the final.',
-        featured: 1
-      },
-      'm2': {
-        id: 'm2',
-        title: 'India vs Australia - World Cup Final',
-        tournamentId: 't2',
-        thumbnail: 'https://images.unsplash.com/photo-1540747913346-19e32dc3e97e?auto=format&fit=crop&q=80&w=1920',
-        videoUrl: 'https://storage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4',
-        duration: '22:45',
-        date: 'Nov 2023',
-        description: 'Australia clinches their 6th World Cup title in a high-stakes final against India.',
-        featured: 0
-      },
-      'm3': {
-        id: 'm3',
-        title: 'India vs Pakistan - Asia Cup Final',
-        tournamentId: 't3',
-        thumbnail: 'https://images.unsplash.com/photo-1531415074968-036ba1b575da?auto=format&fit=crop&q=80&w=1920',
-        videoUrl: 'https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
-        duration: '12:45',
-        date: 'Sept 2023',
-        description: 'A clinical performance by India to lift the Asia Cup trophy.',
-        featured: 0
-      }
-    };
-    await rtdb.ref('matches').set(matches);
-  }
-  
-  if (!tSnapshot.exists() || !mSnapshot.exists()) {
-    console.log('Seeding completed.');
-  }
-};
+app.post('/api/sports', authenticate, async (req, res) => {
+  const { id, name, icon, active } = req.body;
+  await rtdb.ref(`sports/${id}`).set({ id, name, icon, active });
+  res.json({ success: true });
+});
 
-seedData();
+app.delete('/api/sports/:id', authenticate, async (req, res) => {
+  await rtdb.ref(`sports/${req.params.id}`).remove();
+  res.json({ success: true });
+});
+
+// API Endpoints: Standings
+app.get('/api/standings', async (req, res) => {
+  const snapshot = await rtdb.ref('standings').once('value');
+  const data = snapshot.val() || {};
+  res.json(Object.values(data));
+});
+
+app.post('/api/standings', authenticate, async (req, res) => {
+  const { id, tournamentId, teamName, played, won, lost, nrr, points } = req.body;
+  await rtdb.ref(`standings/${id}`).set({ id, tournamentId, teamName, played, won, lost, nrr, points });
+  res.json({ success: true });
+});
+
+app.delete('/api/standings/:id', authenticate, async (req, res) => {
+  await rtdb.ref(`standings/${req.params.id}`).remove();
+  res.json({ success: true });
+});
 
 // API Endpoints: Tournaments
 app.get('/api/tournaments', async (req, res) => {
@@ -190,6 +160,58 @@ app.post('/api/matches', authenticate, async (req, res) => {
 app.delete('/api/matches/:id', authenticate, async (req, res) => {
   await rtdb.ref(`matches/${req.params.id}`).remove();
   res.json({ success: true });
+});
+
+// API Endpoints: Notifications
+app.post('/api/notifications/send-all', authenticate, async (req, res) => {
+  const { title, body } = req.body;
+  if (!title || !body) {
+    return res.status(400).json({ success: false, message: 'Title and Body required' });
+  }
+
+  try {
+    // Get all user tokens from DB
+    const usersSnapshot = await rtdb.ref('users').once('value');
+    const users = usersSnapshot.val() || {};
+    const tokens = [];
+    
+    for (const uid in users) {
+      if (users[uid].fcmToken) {
+        tokens.push(users[uid].fcmToken);
+      }
+    }
+
+    if (tokens.length === 0) {
+      return res.json({ success: true, message: 'No tokens found to notify' });
+    }
+
+    const message = {
+      notification: {
+        title: title,
+        body: body,
+      },
+      tokens: [...new Set(tokens)], // Deduplicate tokens
+    };
+
+    const response = await admin.messaging().sendMulticast(message);
+    console.log(`${response.successCount} messages were sent successfully`);
+
+    // Optionally cleanup invalid tokens
+    if (response.failureCount > 0) {
+      const failedTokens = [];
+      response.responses.forEach((resp, idx) => {
+        if (!resp.success) {
+          failedTokens.push(tokens[idx]);
+        }
+      });
+      console.log('Failed tokens:', failedTokens);
+    }
+
+    res.json({ success: true, count: response.successCount });
+  } catch (error) {
+    console.error('Error sending multi-cast message:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
 });
 
 // Admin Auth & Role Management

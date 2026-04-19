@@ -50,7 +50,7 @@ export default function TournamentRail({ tournaments, activeCategory, onSelectCa
             >
               {t.logo ? (
                 <div className="absolute inset-0 bg-zinc-950">
-                  <img src={t.logo} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" alt={t.name} />
+                  <img src={t.logo} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" alt={t.name} loading="lazy" />
                   <div className={`absolute inset-0 bg-black/40 transition-opacity ${activeCategory === t.name ? 'opacity-0' : 'opacity-40 group-hover:opacity-0'}`} />
                 </div>
               ) : (

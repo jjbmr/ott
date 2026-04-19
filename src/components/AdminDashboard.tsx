@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Plus, Trash2, Edit2, LogOut, LayoutGrid, List, RefreshCcw, Megaphone, Check, X, Upload, Loader2 } from 'lucide-react';
-import { Match, Tournament, Ad } from '../data';
+import { Plus, Trash2, Edit2, LogOut, LayoutGrid, List, RefreshCcw, Megaphone, Check, X, Upload, Loader2, Send, Calendar, Trophy } from 'lucide-react';
+import { Match, Tournament, Ad, Sport, Fixture, Standing } from '../data';
 import { auth, db, storage } from '../firebase';
 import { get, ref, set, remove } from 'firebase/database';
 import { ref as sRef, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
@@ -10,6 +10,7 @@ interface AdminDashboardProps {
 }
 
 type MatchFormState = Partial<Match> & {
+  sportId?: string;
   stageType?: string;
   customStage?: string;
   matchNumber?: string;
@@ -18,7 +19,7 @@ type MatchFormState = Partial<Match> & {
 const STAGE_OPTIONS = ['Quarter Final', 'Semi Final', 'Final', 'Custom Stage'];
 
 const createMatchFormState = (overrides: Partial<MatchFormState> = {}): MatchFormState => ({
-  sport: 'Cricket',
+  sportId: '',
   date: new Date().toISOString().split('T')[0],
   time: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
   quality: '4K',
@@ -27,6 +28,7 @@ const createMatchFormState = (overrides: Partial<MatchFormState> = {}): MatchFor
   stageType: STAGE_OPTIONS[0],
   customStage: '',
   matchNumber: '',
+  externalMatchId: '',
   ...overrides
 });
 
@@ -53,8 +55,28 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   const [matches, setMatches] = useState<Match[]>([]);
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
   const [ads, setAds] = useState<Ad[]>([]);
-  const [view, setView] = useState<'tournaments' | 'matches' | 'ads'>('tournaments');
+  const [sports, setSports] = useState<Sport[]>([]);
+  const [view, setView] = useState<'tournaments' | 'matches' | 'ads' | 'sports' | 'notifications' | 'fixtures' | 'standings'>('tournaments');
+  const [fixtures, setFixtures] = useState<Fixture[]>([]);
+  const [standings, setStandings] = useState<Standing[]>([]);
+  
+  // New Fixture State
+  const [newFixture, setNewFixture] = useState<Partial<Fixture>>({ status: 'upcoming' });
+  const [editingFixtureId, setEditingFixtureId] = useState<string | null>(null);
+
+  // New Standing State
+  const [newStanding, setNewStanding] = useState<Partial<Standing>>({});
+  const [editingStandingId, setEditingStandingId] = useState<string | null>(null);
+
   const [selectedTournamentId, setSelectedTournamentId] = useState<string>('');
+  
+  // Notification State
+  const [notification, setNotification] = useState({ title: '', body: '' });
+  const [isSendingNotification, setIsSendingNotification] = useState(false);
+  
+  // New Sport State
+  const [newSport, setNewSport] = useState<Partial<Sport>>({ active: true });
+  const [editingSportId, setEditingSportId] = useState<string | null>(null);
   
   // New Tournament State
   const [newTournament, setNewTournament] = useState<Partial<Tournament>>({});
@@ -82,10 +104,13 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
 
   const fetchData = async () => {
     try {
-      const [tSnapshot, mSnapshot, aSnapshot] = await Promise.all([
+      const [tSnapshot, mSnapshot, aSnapshot, sSnapshot, fSnapshot, stSnapshot] = await Promise.all([
         get(ref(db, 'tournaments')),
         get(ref(db, 'matches')),
-        get(ref(db, 'ads'))
+        get(ref(db, 'ads')),
+        get(ref(db, 'sports')),
+        get(ref(db, 'fixtures')),
+        get(ref(db, 'standings'))
       ]);
 
       const tournamentsList = tSnapshot.exists()
@@ -97,6 +122,15 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
       const adsList = aSnapshot.exists()
         ? (Object.values(aSnapshot.val()) as Ad[])
         : [];
+      const sportsList = sSnapshot.exists()
+        ? (Object.values(sSnapshot.val()) as Sport[])
+        : [];
+      const fixturesList = fSnapshot.exists()
+        ? (Object.values(fSnapshot.val()) as Fixture[])
+        : [];
+      const standingsList = stSnapshot.exists()
+        ? (Object.values(stSnapshot.val()) as Standing[])
+        : [];
 
       setTournaments(tournamentsList);
       setMatches(
@@ -105,6 +139,9 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
           : []
       );
       setAds(adsList);
+      setSports(sportsList);
+      setFixtures(fixturesList);
+      setStandings(standingsList);
     } catch (error) {
       console.error('Fetch data failed:', error);
     }
@@ -224,6 +261,60 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
     }
   };
 
+  const fetchYouTubeData = async () => {
+    if (!newMatch.videoUrl || !newMatch.videoUrl.includes('youtube.com') && !newMatch.videoUrl.includes('youtu.be')) {
+      alert('Please enter a valid YouTube URL first');
+      return;
+    }
+
+    try {
+      const res = await fetch(`https://www.youtube.com/oembed?url=${encodeURIComponent(newMatch.videoUrl)}&format=json`);
+      if (!res.ok) throw new Error('Failed to fetch YouTube data');
+      const data = await res.json();
+      
+      setNewMatch(prev => ({
+        ...prev,
+        title: data.title || prev.title,
+        thumbnail: data.thumbnail_url || prev.thumbnail,
+        videoType: 'youtube'
+      }));
+    } catch (error) {
+      console.error('YouTube fetch error:', error);
+      alert('Could not fetch YouTube data. Please check the URL.');
+    }
+  };
+
+  const handleAddSport = async () => {
+    if (!newSport.name) {
+      alert('Please fill in sport name');
+      return;
+    }
+
+    const sportId = editingSportId || `s${Date.now()}`;
+    const sport: Sport = {
+      id: sportId,
+      name: newSport.name!,
+      active: newSport.active ?? true,
+      icon: newSport.icon || ''
+    };
+
+    await set(ref(db, `sports/${sport.id}`), sport);
+    fetchData();
+    setNewSport({ active: true });
+    setEditingSportId(null);
+  };
+
+  const deleteSport = async (id: string) => {
+    if (!confirm('Delete this sport?')) return;
+    await remove(ref(db, `sports/${id}`));
+    fetchData();
+  };
+
+  const toggleSportStatus = async (sport: Sport) => {
+    await set(ref(db, `sports/${sport.id}/active`), !sport.active);
+    fetchData();
+  };
+
   const handleAddAd = async () => {
     if (!newAd.title || !newAd.videoUrl) {
       alert('Please fill in ad title and video URL');
@@ -254,6 +345,100 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
 
   const toggleAdStatus = async (ad: Ad) => {
     await set(ref(db, `ads/${ad.id}/active`), !ad.active);
+    fetchData();
+  };
+
+  const handleSendNotification = async () => {
+    if (!notification.title || !notification.body) {
+      alert('Please fill in title and message');
+      return;
+    }
+
+    setIsSendingNotification(true);
+    try {
+      const idToken = await auth.currentUser?.getIdToken();
+      const res = await fetch('/api/notifications/send-all', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`
+        },
+        body: JSON.stringify(notification)
+      });
+
+      if (res.ok) {
+        alert('Notification sent successfully!');
+        setNotification({ title: '', body: '' });
+      } else {
+        const data = await res.json();
+        alert(`Failed to send: ${data.message || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error('Send notification error:', error);
+      alert('Failed to send notification');
+    } finally {
+      setIsSendingNotification(false);
+    }
+  };
+
+  const handleAddFixture = async () => {
+    if (!newFixture.team1 || !newFixture.team2 || !newFixture.tournamentId) {
+      alert('Please fill in required fields for fixture');
+      return;
+    }
+
+    const fixtureId = editingFixtureId || `f${Date.now()}`;
+    const fixture: Fixture = {
+      id: fixtureId,
+      tournamentId: newFixture.tournamentId!,
+      sportId: newFixture.sportId || '',
+      team1: newFixture.team1!,
+      team2: newFixture.team2!,
+      date: newFixture.date || new Date().toISOString().split('T')[0],
+      time: newFixture.time || '19:00',
+      venue: newFixture.venue || '',
+      status: newFixture.status as any || 'upcoming'
+    };
+
+    await set(ref(db, `fixtures/${fixture.id}`), fixture);
+    fetchData();
+    setNewFixture({ status: 'upcoming' });
+    setEditingFixtureId(null);
+  };
+
+  const deleteFixture = async (id: string) => {
+    if (!confirm('Delete this fixture?')) return;
+    await remove(ref(db, `fixtures/${id}`));
+    fetchData();
+  };
+
+  const handleAddStanding = async () => {
+    if (!newStanding.teamName || !newStanding.tournamentId) {
+      alert('Please fill in required fields for standing');
+      return;
+    }
+
+    const standingId = editingStandingId || `st${Date.now()}`;
+    const standing: Standing = {
+      id: standingId,
+      tournamentId: newStanding.tournamentId!,
+      teamName: newStanding.teamName!,
+      played: Number(newStanding.played || 0),
+      won: Number(newStanding.won || 0),
+      lost: Number(newStanding.lost || 0),
+      nrr: newStanding.nrr || '0.000',
+      points: Number(newStanding.points || 0)
+    };
+
+    await set(ref(db, `standings/${standing.id}`), standing);
+    fetchData();
+    setNewStanding({});
+    setEditingStandingId(null);
+  };
+
+  const deleteStanding = async (id: string) => {
+    if (!confirm('Delete this standing?')) return;
+    await remove(ref(db, `standings/${id}`));
     fetchData();
   };
 
@@ -321,8 +506,8 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
     const matchToAdd: Match = {
       id: matchId,
       title: newMatch.title!,
+      sportId: newMatch.sportId!,
       tournamentId: newMatch.tournamentId!,
-      sport: 'Cricket',
       stage: stageValue,
       thumbnail: newMatch.thumbnail || '',
       videoUrl: newMatch.videoUrl!,
@@ -334,7 +519,8 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
       views: '0',
       description: newMatch.description || '',
       featured: newMatch.featured || false,
-      scoreCardId: newMatch.scoreCardId || ''
+      scoreCardId: newMatch.scoreCardId || '',
+      externalMatchId: newMatch.externalMatchId || ''
     };
 
     await set(ref(db, `matches/${matchToAdd.id}`), {
@@ -414,6 +600,13 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                 Tournaments
               </button>
               <button 
+                onClick={() => setView('sports')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${view === 'sports' ? 'bg-sky-500 text-zinc-950 font-bold' : 'text-zinc-400 hover:text-white'}`}
+              >
+                <Plus className="w-4 h-4" />
+                Sports
+              </button>
+              <button 
                 onClick={() => setView('matches')}
                 className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${view === 'matches' ? 'bg-sky-500 text-zinc-950 font-bold' : 'text-zinc-400 hover:text-white'}`}
               >
@@ -426,6 +619,27 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
               >
                 <Megaphone className="w-4 h-4" />
                 Ads
+              </button>
+              <button 
+                onClick={() => setView('fixtures')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${view === 'fixtures' ? 'bg-sky-500 text-zinc-950 font-bold' : 'text-zinc-400 hover:text-white'}`}
+              >
+                <Calendar className="w-4 h-4" />
+                Fixtures
+              </button>
+              <button 
+                onClick={() => setView('standings')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${view === 'standings' ? 'bg-sky-500 text-zinc-950 font-bold' : 'text-zinc-400 hover:text-white'}`}
+              >
+                <Trophy className="w-4 h-4" />
+                Standings
+              </button>
+              <button 
+                onClick={() => setView('notifications')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${view === 'notifications' ? 'bg-sky-500 text-zinc-950 font-bold' : 'text-zinc-400 hover:text-white'}`}
+              >
+                <Send className="w-4 h-4" />
+                Push Alert
               </button>
             </div>
             <button
@@ -441,7 +655,365 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
           </div>
         </div>
 
-        {view === 'tournaments' ? (
+        {view === 'sports' ? (
+          <div className="space-y-12">
+            <div className={`p-6 rounded-2xl border transition-all duration-500 ${editingSportId ? 'bg-sky-500/10 border-sky-500/30' : 'bg-zinc-900/50 border-white/10'}`}>
+              <h2 className="text-xl font-semibold mb-6 flex items-center gap-2 text-sky-500 uppercase tracking-widest">
+                {editingSportId ? <Edit2 className="w-5 h-5" /> : <Plus className="w-5 h-5" />}
+                {editingSportId ? 'Edit Sport' : 'Create New Sport'}
+              </h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <label className="text-xs font-black uppercase tracking-widest text-zinc-500">Sport Name</label>
+                  <input
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-sky-500"
+                    placeholder="e.g., Cricket, Football"
+                    value={newSport.name || ''}
+                    onChange={e => setNewSport({ ...newSport, name: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-black uppercase tracking-widest text-zinc-500">Icon Name (Lucide)</label>
+                  <input
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-sky-500"
+                    placeholder="e.g., Trophy, Play"
+                    value={newSport.icon || ''}
+                    onChange={e => setNewSport({ ...newSport, icon: e.target.value })}
+                  />
+                </div>
+              </div>
+              <div className="flex items-center gap-4 mt-6">
+                <button onClick={handleAddSport} className="px-8 py-3 bg-sky-500 rounded-xl text-zinc-950 font-bold hover:bg-sky-400 transition-all shadow-lg shadow-sky-500/20">
+                  {editingSportId ? 'Update Sport' : 'Create Sport'}
+                </button>
+                {editingSportId && (
+                  <button onClick={() => { setEditingSportId(null); setNewSport({ active: true }); }} className="px-8 py-3 bg-zinc-800 rounded-xl text-zinc-300 font-bold hover:bg-zinc-700 transition-all">
+                    Cancel Edit
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {sports.map(sport => (
+                <div key={sport.id} className="bg-zinc-900/50 p-6 rounded-2xl border border-white/10 flex justify-between items-center group">
+                  <div className="flex-1">
+                    <h3 className="text-lg font-bold text-white">{sport.name}</h3>
+                    <button onClick={() => toggleSportStatus(sport)} className={`flex items-center gap-1.5 text-xs font-bold transition-all mt-2 ${sport.active ? 'text-sky-500' : 'text-zinc-500'}`}>
+                      {sport.active ? <Check className="w-3.5 h-3.5" /> : <X className="w-3.5 h-3.5" />}
+                      {sport.active ? 'Active' : 'Inactive'}
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => { setEditingSportId(sport.id); setNewSport(sport); window.scrollTo({ top: 0, behavior: 'smooth' }); }} className="p-3 bg-zinc-800 text-zinc-500 rounded-xl opacity-0 group-hover:opacity-100 hover:text-sky-500 hover:bg-sky-500/10 transition-all shadow-sm">
+                      <Edit2 className="w-5 h-5" />
+                    </button>
+                    <button onClick={() => deleteSport(sport.id)} className="p-3 bg-zinc-800 text-zinc-500 rounded-xl opacity-0 group-hover:opacity-100 hover:text-red-500 hover:bg-red-500/10 transition-all shadow-sm">
+                      <Trash2 className="w-5 h-5" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : view === 'fixtures' ? (
+          <div className="space-y-12 animate-in fade-in duration-500">
+            <div className="bg-zinc-900/50 p-6 rounded-2xl border border-white/10">
+              <h2 className="text-xl font-bold mb-6 text-sky-500 flex items-center gap-2">
+                <Calendar className="w-5 h-5" />
+                {editingFixtureId ? 'Edit Fixture' : 'Schedule New Fixture'}
+              </h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <div className="space-y-2">
+                  <label className="text-xs font-black uppercase tracking-widest text-zinc-500">Tournament</label>
+                  <select
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-white focus:outline-none"
+                    value={newFixture.tournamentId || ''}
+                    onChange={e => setNewFixture({ ...newFixture, tournamentId: e.target.value })}
+                  >
+                    <option value="">Select...</option>
+                    {tournaments.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-black uppercase tracking-widest text-zinc-500">Team 1</label>
+                  <input
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-white"
+                    placeholder="India"
+                    value={newFixture.team1 || ''}
+                    onChange={e => setNewFixture({ ...newFixture, team1: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-black uppercase tracking-widest text-zinc-500">Team 2</label>
+                  <input
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-white"
+                    placeholder="Australia"
+                    value={newFixture.team2 || ''}
+                    onChange={e => setNewFixture({ ...newFixture, team2: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-black uppercase tracking-widest text-zinc-500">Status</label>
+                  <select
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-white"
+                    value={newFixture.status || 'upcoming'}
+                    onChange={e => setNewFixture({ ...newFixture, status: e.target.value as any })}
+                  >
+                    <option value="upcoming">Upcoming</option>
+                    <option value="live">Live Now</option>
+                    <option value="finished">Finished</option>
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-black uppercase tracking-widest text-zinc-500">Date</label>
+                  <input
+                    type="date"
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-white"
+                    value={newFixture.date || ''}
+                    onChange={e => setNewFixture({ ...newFixture, date: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-black uppercase tracking-widest text-zinc-500">Time</label>
+                  <input
+                    type="time"
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-white"
+                    value={newFixture.time || ''}
+                    onChange={e => setNewFixture({ ...newFixture, time: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                  <label className="text-xs font-black uppercase tracking-widest text-zinc-500">Venue</label>
+                  <input
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-white"
+                    placeholder="Melbourne Cricket Ground"
+                    value={newFixture.venue || ''}
+                    onChange={e => setNewFixture({ ...newFixture, venue: e.target.value })}
+                  />
+                </div>
+              </div>
+              <div className="flex gap-4 mt-6">
+                <button onClick={handleAddFixture} className="px-8 py-3 bg-sky-500 text-zinc-950 font-black rounded-xl hover:bg-sky-400 transition-all uppercase tracking-widest text-xs">
+                  {editingFixtureId ? 'Update Fixture' : 'Schedule Fixture'}
+                </button>
+                {editingFixtureId && (
+                  <button onClick={() => { setEditingFixtureId(null); setNewFixture({ status: 'upcoming' }); }} className="px-8 py-3 bg-zinc-800 text-white font-black rounded-xl hover:bg-zinc-700 transition-all uppercase tracking-widest text-xs">
+                    Cancel
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {fixtures.map(f => (
+                <div key={f.id} className="bg-zinc-900/50 p-6 rounded-2xl border border-white/10 flex justify-between items-center group">
+                  <div>
+                    <p className="text-[10px] font-black text-sky-500 uppercase tracking-widest mb-1">
+                      {tournaments.find(t => t.id === f.tournamentId)?.name}
+                    </p>
+                    <h3 className="text-lg font-bold text-white">{f.team1} vs {f.team2}</h3>
+                    <p className="text-zinc-500 text-xs mt-1 font-medium">{f.date} • {f.time} • {f.venue}</p>
+                    <span className={`inline-block px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest mt-2 ${f.status === 'live' ? 'bg-red-500 text-white animate-pulse' : 'bg-zinc-800 text-zinc-400'}`}>
+                      {f.status}
+                    </span>
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={() => { setEditingFixtureId(f.id); setNewFixture(f); window.scrollTo({ top: 0, behavior: 'smooth' }); }} className="p-3 bg-zinc-800 text-zinc-500 rounded-xl hover:text-sky-500 transition-all">
+                      <Edit2 className="w-4 h-4" />
+                    </button>
+                    <button onClick={() => deleteFixture(f.id)} className="p-3 bg-zinc-800 text-zinc-500 rounded-xl hover:text-red-500 transition-all">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : view === 'standings' ? (
+          <div className="space-y-12 animate-in fade-in duration-500">
+            <div className="bg-zinc-900/50 p-6 rounded-2xl border border-white/10">
+              <h2 className="text-xl font-bold mb-6 text-sky-500 flex items-center gap-2">
+                <Trophy className="w-5 h-5" />
+                {editingStandingId ? 'Edit Team Stats' : 'Add Team to Points Table'}
+              </h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <div className="space-y-2">
+                  <label className="text-xs font-black uppercase tracking-widest text-zinc-500">Tournament</label>
+                  <select
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-white focus:outline-none"
+                    value={newStanding.tournamentId || ''}
+                    onChange={e => setNewStanding({ ...newStanding, tournamentId: e.target.value })}
+                  >
+                    <option value="">Select...</option>
+                    {tournaments.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-black uppercase tracking-widest text-zinc-500">Team Name</label>
+                  <input
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-white"
+                    placeholder="e.g., KKR"
+                    value={newStanding.teamName || ''}
+                    onChange={e => setNewStanding({ ...newStanding, teamName: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-black uppercase tracking-widest text-zinc-500">Played</label>
+                  <input
+                    type="number"
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-white"
+                    value={newStanding.played || 0}
+                    onChange={e => setNewStanding({ ...newStanding, played: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-black uppercase tracking-widest text-zinc-500">Won</label>
+                  <input
+                    type="number"
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-white"
+                    value={newStanding.won || 0}
+                    onChange={e => setNewStanding({ ...newStanding, won: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-black uppercase tracking-widest text-zinc-500">Lost</label>
+                  <input
+                    type="number"
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-white"
+                    value={newStanding.lost || 0}
+                    onChange={e => setNewStanding({ ...newStanding, lost: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-black uppercase tracking-widest text-zinc-500">NRR</label>
+                  <input
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-white"
+                    placeholder="+0.450"
+                    value={newStanding.nrr || ''}
+                    onChange={e => setNewStanding({ ...newStanding, nrr: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-black uppercase tracking-widest text-zinc-500">Points</label>
+                  <input
+                    type="number"
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-white"
+                    value={newStanding.points || 0}
+                    onChange={e => setNewStanding({ ...newStanding, points: e.target.value })}
+                  />
+                </div>
+              </div>
+              <div className="flex gap-4 mt-6">
+                <button onClick={handleAddStanding} className="px-8 py-3 bg-sky-500 text-zinc-950 font-black rounded-xl hover:bg-sky-400 transition-all uppercase tracking-widest text-xs">
+                  {editingStandingId ? 'Update Stats' : 'Add Team'}
+                </button>
+                {editingStandingId && (
+                  <button onClick={() => { setEditingStandingId(null); setNewStanding({}); }} className="px-8 py-3 bg-zinc-800 text-white font-black rounded-xl hover:bg-zinc-700 transition-all uppercase tracking-widest text-xs">
+                    Cancel
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="bg-zinc-900/50 rounded-2xl border border-white/10 overflow-hidden">
+              <table className="w-full text-left">
+                <thead className="bg-zinc-950/50 border-b border-white/5">
+                  <tr className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">
+                    <th className="px-6 py-4">Team</th>
+                    <th className="px-6 py-4">Tournament</th>
+                    <th className="px-6 py-4 text-center">P</th>
+                    <th className="px-6 py-4 text-center">W</th>
+                    <th className="px-6 py-4 text-center">L</th>
+                    <th className="px-6 py-4 text-center">NRR</th>
+                    <th className="px-6 py-4 text-center">PTS</th>
+                    <th className="px-6 py-4 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5">
+                  {standings.map(s => (
+                    <tr key={s.id} className="text-sm font-medium text-zinc-300 hover:bg-white/[0.02] transition-colors">
+                      <td className="px-6 py-4 text-white font-bold">{s.teamName}</td>
+                      <td className="px-6 py-4 text-xs text-zinc-500 uppercase tracking-tight">{tournaments.find(t => t.id === s.tournamentId)?.name}</td>
+                      <td className="px-6 py-4 text-center">{s.played}</td>
+                      <td className="px-6 py-4 text-center">{s.won}</td>
+                      <td className="px-6 py-4 text-center">{s.lost}</td>
+                      <td className="px-6 py-4 text-center font-mono text-xs">{s.nrr}</td>
+                      <td className="px-6 py-4 text-center text-sky-500 font-black">{s.points}</td>
+                      <td className="px-6 py-4 text-right">
+                        <div className="flex justify-end gap-2">
+                          <button onClick={() => { setEditingStandingId(s.id); setNewStanding(s); window.scrollTo({ top: 0, behavior: 'smooth' }); }} className="p-2 text-zinc-500 hover:text-sky-500">
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button onClick={() => deleteStanding(s.id)} className="p-2 text-zinc-500 hover:text-red-500">
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ) : view === 'notifications' ? (
+          <div className="max-w-2xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="bg-zinc-900/50 p-8 rounded-3xl border border-white/10 shadow-2xl">
+              <div className="flex items-center gap-4 mb-8">
+                <div className="p-3 bg-sky-500/10 rounded-2xl">
+                  <Send className="w-6 h-6 text-sky-500" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-white">Global Push Alert</h2>
+                  <p className="text-zinc-500 text-sm">Send a notification to all registered users</p>
+                </div>
+              </div>
+
+              <div className="space-y-6">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-1">Alert Title</label>
+                  <input
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-2xl px-5 py-4 text-white focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500/50 transition-all font-medium"
+                    placeholder="e.g., Match Starting Now!"
+                    value={notification.title}
+                    onChange={e => setNotification({ ...notification, title: e.target.value })}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-1">Message Body</label>
+                  <textarea
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-2xl px-5 py-4 text-white focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500/50 transition-all font-medium min-h-[120px] resize-none"
+                    placeholder="e.g., India vs Pakistan is live. Click to watch now!"
+                    value={notification.body}
+                    onChange={e => setNotification({ ...notification, body: e.target.value })}
+                  />
+                </div>
+
+                <div className="p-4 bg-sky-500/5 border border-sky-500/10 rounded-2xl">
+                  <p className="text-[10px] text-sky-500/70 font-bold uppercase tracking-widest leading-relaxed">
+                    This will be sent to all users who have allowed notifications on their devices.
+                  </p>
+                </div>
+
+                <button
+                  onClick={handleSendNotification}
+                  disabled={isSendingNotification}
+                  className="w-full bg-sky-500 hover:bg-sky-400 disabled:opacity-50 text-zinc-950 font-black py-5 rounded-2xl transition-all shadow-lg shadow-sky-500/20 flex items-center justify-center gap-3 group"
+                >
+                  {isSendingNotification ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : (
+                    <>
+                      <Send className="w-5 h-5 group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />
+                      Send Notification Now
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : view === 'tournaments' ? (
           <div className="space-y-12">
             {/* Create/Edit Tournament */}
             <div className={`p-6 rounded-2xl border transition-all duration-500 ${editingTournamentId ? 'bg-sky-500/10 border-sky-500/30' : 'bg-zinc-900/50 border-white/10'}`}>
@@ -704,6 +1276,19 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
               </h2>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 <div className="space-y-2">
+                  <label className="text-sm font-medium text-zinc-500">Select Sport</label>
+                  <select
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-sky-500 appearance-none"
+                    value={newMatch.sportId || ''}
+                    onChange={e => setNewMatch({ ...newMatch, sportId: e.target.value })}
+                  >
+                    <option value="">Choose Sport...</option>
+                    {sports.map(s => (
+                      <option key={s.id} value={s.id}>{s.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-2">
                   <label className="text-sm font-medium text-zinc-500">Select Tournament</label>
                   <select
                     className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-sky-500 appearance-none"
@@ -808,6 +1393,15 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                     onChange={e => setNewMatch({ ...newMatch, scoreCardId: e.target.value })}
                   />
                 </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-zinc-500">External Match ID (CrickDB API)</label>
+                  <input
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-sky-500"
+                    placeholder="e.g., f6ea2712..."
+                    value={newMatch.externalMatchId || ''}
+                    onChange={e => setNewMatch({ ...newMatch, externalMatchId: e.target.value })}
+                  />
+                </div>
                 <div className="space-y-2 lg:col-span-2">
                   <label className="text-sm font-medium text-zinc-500">Description</label>
                   <textarea
@@ -864,12 +1458,23 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                 <div className="space-y-2 lg:col-span-2">
                   <label className="text-sm font-medium text-zinc-500">Video URL (m3u8/mp4 or YouTube URL)</label>
                   <div className="flex flex-col gap-2">
-                    <input
-                      className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-sky-500"
-                      placeholder={newMatch.videoType === 'youtube' ? "https://www.youtube.com/watch?v=..." : "https://..."}
-                      value={newMatch.videoUrl || ''}
-                      onChange={e => setNewMatch({ ...newMatch, videoUrl: e.target.value })}
-                    />
+                    <div className="flex gap-2">
+                      <input
+                        className="flex-1 bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-sky-500"
+                        placeholder={newMatch.videoType === 'youtube' ? "https://www.youtube.com/watch?v=..." : "https://..."}
+                        value={newMatch.videoUrl || ''}
+                        onChange={e => setNewMatch({ ...newMatch, videoUrl: e.target.value })}
+                      />
+                      {newMatch.videoType === 'youtube' && (
+                        <button 
+                          onClick={fetchYouTubeData}
+                          className="px-4 py-2 bg-sky-500/10 text-sky-500 rounded-xl text-xs font-black border border-sky-500/20 hover:bg-sky-500 hover:text-zinc-950 transition-all uppercase tracking-widest flex items-center gap-2"
+                        >
+                          <RefreshCcw className="w-3 h-3" />
+                          Fetch Data
+                        </button>
+                      )}
+                    </div>
                     {newMatch.videoType === 'mp4' && (
                       <label className={`flex items-center justify-center gap-2 px-4 py-2 bg-zinc-800 rounded-xl text-xs text-zinc-300 font-bold hover:bg-zinc-700 transition-all cursor-pointer border border-white/5 ${isUploadingVideo ? 'opacity-50' : ''}`}>
                         {isUploadingVideo ? <Loader2 className="w-3 h-3 animate-spin text-sky-500" /> : <Upload className="w-3 h-3" />}
