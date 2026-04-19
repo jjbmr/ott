@@ -11,6 +11,7 @@ import AdminDashboard from './components/AdminDashboard';
 import TournamentRail from './components/TournamentRail';
 import AdBanner from './components/AdBanner';
 import FixtureRow from './components/FixtureRow';
+import LiveTicker from './components/LiveTicker';
 import { Match, Tournament, Ad, Sport, Fixture, Standing, matches as mockMatches, tournaments as mockTournaments } from './data';
 import { getThumbnailUrl } from './utils';
 
@@ -124,19 +125,43 @@ export default function App() {
         // Sync watchlist from Firebase
         const watchlistRef = ref(db, `users/${firebaseUser.uid}/watchlist`);
         const wSnapshot = await get(watchlistRef);
+        
+        const localWatchlist = JSON.parse(localStorage.getItem('user_watchlist') || '[]');
+        
         if (wSnapshot.exists()) {
           const cloudWatchlist = wSnapshot.val();
-          setWatchlist(cloudWatchlist);
-          localStorage.setItem('user_watchlist', JSON.stringify(cloudWatchlist));
+          // Merge local and cloud, removing duplicates
+          const mergedWatchlist = [...new Set([...localWatchlist, ...cloudWatchlist])];
+          setWatchlist(mergedWatchlist);
+          localStorage.setItem('user_watchlist', JSON.stringify(mergedWatchlist));
+          
+          // Update cloud if they were different
+          if (mergedWatchlist.length !== cloudWatchlist.length) {
+            set(watchlistRef, mergedWatchlist);
+          }
+        } else if (localWatchlist.length > 0) {
+          // Cloud empty but local has data, upload it
+          set(watchlistRef, localWatchlist);
+          setWatchlist(localWatchlist);
         }
 
         // Sync history from Firebase
         const historyRef = ref(db, `users/${firebaseUser.uid}/history`);
         const hSnapshot = await get(historyRef);
+        const localHistory = JSON.parse(localStorage.getItem('user_history') || '[]');
+        
         if (hSnapshot.exists()) {
           const cloudHistory = hSnapshot.val();
-          setHistory(cloudHistory);
-          localStorage.setItem('user_history', JSON.stringify(cloudHistory));
+          const mergedHistory = [...new Set([...localHistory, ...cloudHistory])].slice(0, 10);
+          setHistory(mergedHistory);
+          localStorage.setItem('user_history', JSON.stringify(mergedHistory));
+          
+          if (mergedHistory.length !== cloudHistory.length) {
+            set(historyRef, mergedHistory);
+          }
+        } else if (localHistory.length > 0) {
+          set(historyRef, localHistory);
+          setHistory(localHistory);
         }
 
         // Check admin role
@@ -322,6 +347,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen text-zinc-50 font-sans selection:bg-sky-500/30 overflow-x-hidden">
+      <LiveTicker />
       {ads.filter(a => a.active).map(ad => (
         <AdBanner key={ad.id} ad={ad} />
       ))}

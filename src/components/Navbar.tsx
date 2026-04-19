@@ -71,7 +71,11 @@ const Navbar = forwardRef<NavbarHandle, NavbarProps>(({ activeCategory, onSelect
   ];
 
   const suggestions = searchQuery.length >= 2 
-    ? matches.filter(m => m.title.toLowerCase().includes(searchQuery.toLowerCase())).slice(0, 5)
+    ? [
+        ...matches.filter(m => m.title.toLowerCase().includes(searchQuery.toLowerCase())).slice(0, 4).map(m => ({ ...m, type: 'match' })),
+        ...tournaments.filter(t => t.name.toLowerCase().includes(searchQuery.toLowerCase())).slice(0, 2).map(t => ({ id: t.id, title: t.name, type: 'tournament' })),
+        ...sports.filter(s => s.name.toLowerCase().includes(searchQuery.toLowerCase())).slice(0, 2).map(s => ({ id: s.id, title: s.name, type: 'sport' }))
+      ]
     : [];
 
   const trendingSearches = ['IPL 2024', 'World Cup Final', 'India vs Pakistan', 'Highlights'];
@@ -158,21 +162,33 @@ const Navbar = forwardRef<NavbarHandle, NavbarProps>(({ activeCategory, onSelect
                         <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Top Results</span>
                       </div>
                       {suggestions.length > 0 ? (
-                        suggestions.map(match => (
+                        suggestions.map(item => (
                           <button
-                            key={match.id}
+                            key={`${item.type}-${item.id}`}
                             onClick={() => {
-                              onPlayMatch(match);
+                              if (item.type === 'match') {
+                                onPlayMatch(item as Match);
+                              } else {
+                                onSelectCategory(item.id);
+                              }
                               setShowSuggestions(false);
                               setShowSearch(false);
                             }}
                             className="w-full flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-white/5 transition-all text-left group"
                           >
-                            <img src={match.thumbnail} className="w-12 h-8 object-cover rounded-md" loading="lazy" />
+                            {item.type === 'match' ? (
+                              <img src={(item as Match).thumbnail} className="w-12 h-8 object-cover rounded-md" loading="lazy" />
+                            ) : (
+                              <div className="w-12 h-8 bg-sky-500/10 border border-sky-500/20 rounded-md flex items-center justify-center">
+                                <TrendingUp className="w-4 h-4 text-sky-500" />
+                              </div>
+                            )}
                             <div className="min-w-0">
-                              <p className="text-xs font-bold text-white group-hover:text-sky-400 transition-colors truncate">{match.title}</p>
+                              <p className="text-xs font-bold text-white group-hover:text-sky-400 transition-colors truncate">{item.title}</p>
                               <p className="text-[9px] font-bold text-zinc-500 uppercase tracking-tight">
-                                {tournaments.find(t => t.id === match.tournamentId)?.shortName || 'Highlights'}
+                                {item.type === 'match' 
+                                  ? (tournaments.find(t => t.id === (item as Match).tournamentId)?.shortName || 'Highlights')
+                                  : item.type}
                               </p>
                             </div>
                           </button>

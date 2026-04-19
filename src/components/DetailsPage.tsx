@@ -456,6 +456,7 @@ export default function DetailsPage({ match, allMatches, tournaments, watchlist,
             </div>
           </div>
         </div>
+      </div>
 
         {/* Popular Tournaments in Details Page */}
         <div className="mt-12 sm:mt-20">
